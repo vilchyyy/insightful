@@ -1,99 +1,84 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Dimensions,
-  ScrollView,
   TouchableOpacity,
   Platform,
   StatusBar,
 } from "react-native";
-import Video, { OnLoadData, OnProgressData } from "react-native-video";
+import Video, {
+  OnLoadData,
+  OnProgressData,
+  VideoRef,
+} from "react-native-video";
 import Animated, {
   useAnimatedStyle,
   withSpring,
-  interpolate,
   useSharedValue,
-  withTiming,
 } from "react-native-reanimated";
 import { BlurView } from "@react-native-community/blur";
-import { Pause, Play } from "lucide-react-native";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-// Sample transcription data
-const transcription = [
-  { start: 0, end: 5, text: "Welcome to our demonstration video." },
-  { start: 5, end: 10, text: "Today we'll be exploring key concepts." },
-  { start: 10, end: 15, text: "Let's dive into the details." },
+const segments = [
+  { id: 1, start: 0, end: 5, title: "Introduction" },
+  { id: 2, start: 10, end: 20, title: "Overview" },
+  { id: 3, start: 20, end: 30, title: "Main Content" },
 ];
 
-interface ControlButtonProps {
-  onPress: () => void;
-  children: React.ReactNode;
-}
-
-const ControlButton = ({ onPress, children }: ControlButtonProps) => (
-  <TouchableOpacity
-    style={styles.controlButton}
-    onPress={onPress}
-    activeOpacity={0.7}
-  >
-    <Text style={styles.controlButtonText}>{children}</Text>
-  </TouchableOpacity>
-);
+const springConfig = { damping: 30, stiffness: 300, mass: 1 };
 
 export default function VideoPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [isControlsVisible, setIsControlsVisible] = useState(true);
-  const videoRef = useRef(null);
-  const controlsOpacity = useSharedValue(1);
-  const floatingCardOffset = useSharedValue(0);
+  const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const videoRef = useRef<VideoRef>(null);
 
-  const getCurrentTranscription = () => {
-    return (
-      transcription.find(
-        (item) => currentTime >= item.start && currentTime <= item.end
-      )?.text || ""
-    );
-  };
+  // Animation shared values
+  const top = useSharedValue(SCREEN_HEIGHT - SCREEN_HEIGHT / 10.7);
+  const bottom = useSharedValue(40);
+  const borderRadius = useSharedValue(24);
+  const marginHorizontal = useSharedValue(20);
 
-  const toggleControls = () => {
-    setIsControlsVisible(!isControlsVisible);
-    controlsOpacity.value = withTiming(isControlsVisible ? 0 : 1, {
-      duration: 300,
-    });
-  };
-
-  const controlsStyle = useAnimatedStyle(() => ({
-    opacity: controlsOpacity.value,
-  }));
-
+  // Animated style for the floating island
   const floatingCardStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        translateY: withSpring(floatingCardOffset.value, {
-          damping: 15,
-          stiffness: 100,
-        }),
-      },
-    ],
-    opacity: interpolate(controlsOpacity.value, [0, 1], [0, 1]),
+    top: top.value,
+    bottom: bottom.value,
+    borderRadius: borderRadius.value,
+    marginHorizontal: marginHorizontal.value,
   }));
+
+  const currentSegment = segments[currentSegmentIndex];
+
+  useEffect(() => {
+    if (currentTime >= currentSegment?.end) {
+      setIsPlaying(false);
+      handleExpand();
+    }
+  }, [currentTime, currentSegment]);
+
+  const handleExpand = () => {
+    setIsExpanded(true);
+    top.value = withSpring(0, springConfig);
+    bottom.value = withSpring(0, springConfig);
+    borderRadius.value = withSpring(0, springConfig);
+    marginHorizontal.value = withSpring(0, springConfig);
+  };
+
+  const handleCollapse = () => {
+    setIsExpanded(false);
+    top.value = withSpring(SCREEN_HEIGHT - SCREEN_HEIGHT / 10.7, springConfig);
+    bottom.value = withSpring(40, springConfig);
+    borderRadius.value = withSpring(24, springConfig);
+    marginHorizontal.value = withSpring(20, springConfig);
+  };
 
   const onProgress = (data: OnProgressData) => {
     setCurrentTime(data.currentTime);
-  };
-
-  const onLoad = (data: OnLoadData) => {
-    setDuration(data.duration);
-  };
-
-  const togglePlayback = () => {
-    setIsPlaying(!isPlaying);
   };
 
   const formatTime = (timeInSeconds: number) => {
@@ -105,10 +90,23 @@ export default function VideoPage() {
   return (
     <View style={styles.container}>
       <StatusBar hidden />
+
       <TouchableOpacity
         activeOpacity={1}
         style={styles.videoContainer}
-        onPress={toggleControls}
+        onPress={() => {
+          if (isExpanded) {
+            handleCollapse();
+            setIsPlaying(true);
+            if (currentSegmentIndex < segments.length - 1) {
+              setCurrentSegmentIndex((prev) => prev + 1);
+              videoRef.current?.seek(segments[currentSegmentIndex + 1].start);
+            }
+          } else if (isPlaying) {
+            setCurrentSegmentIndex((prev) => prev + 1);
+            videoRef.current?.seek(segments[currentSegmentIndex + 1].start);
+          }
+        }}
       >
         <Video
           ref={videoRef}
@@ -118,55 +116,64 @@ export default function VideoPage() {
           style={styles.video}
           paused={!isPlaying}
           onProgress={onProgress}
-          onLoad={onLoad}
+          onLoad={(data: OnLoadData) => {
+            if (!isPlaying) {
+              setDuration(data.duration);
+              setIsPlaying(true);
+            }
+          }}
           resizeMode="cover"
-          posterResizeMode="cover"
           poster="https://storage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg"
         />
 
-        <Animated.View style={[styles.controlsContainer, controlsStyle]}>
-          <Animated.View style={[styles.floatingIsland, floatingCardStyle]}>
-            {Platform.OS === "ios" ? (
-              <BlurView
-                style={StyleSheet.absoluteFill}
-                blurType="dark"
-                blurAmount={20}
-              />
-            ) : null}
-            <View style={styles.contentWrapper}>
-              <View style={styles.timelineContainer}>
-                <TouchableOpacity
-                  style={styles.progressBarContainer}
-                  onPress={(event) => {
-                    const { locationX } = event.nativeEvent;
-                    const percentage = locationX / (SCREEN_WIDTH - 40);
-                  }}
-                >
-                  <View style={styles.progressBarBackground}>
-                    <View
-                      style={[
-                        styles.progressBar,
-                        { width: `${(currentTime / (duration || 1)) * 100}%` },
-                      ]}
-                    />
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.timeDisplay}>
-                  <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
-                  <Text style={styles.timeText}>{formatTime(duration)}</Text>
-                </View>
+        <Animated.View style={[styles.floatingIsland, floatingCardStyle]}>
+          {Platform.OS === "ios" ? (
+            <BlurView
+              style={StyleSheet.absoluteFill}
+              blurType="dark"
+              blurAmount={20}
+            />
+          ) : null}
+          <View style={styles.contentWrapper}>
+            <View style={styles.timelineContainer}>
+              <View style={styles.progressBarContainer}>
+                {segments.map((segment, index) => {
+                  let progress = 0;
+                  if (index < currentSegmentIndex) {
+                    progress = 1;
+                  } else if (index === currentSegmentIndex) {
+                    progress = Math.min(
+                      Math.max(
+                        (currentTime - segment.start) /
+                          (segment.end - segment.start),
+                        0
+                      ),
+                      1
+                    );
+                  }
+                  return (
+                    <View key={segment.id} style={styles.segment}>
+                      <View
+                        style={[
+                          styles.segmentFill,
+                          { width: `${progress * 100}%` },
+                        ]}
+                      />
+                    </View>
+                  );
+                })}
               </View>
-
-              <ScrollView
-                style={styles.transcriptionContainer}
-                contentContainerStyle={styles.transcriptionContent}
-              >
-                <Text style={styles.transcriptionText}>
-                  {getCurrentTranscription()}
-                </Text>
-              </ScrollView>
             </View>
-          </Animated.View>
+
+            {isExpanded && (
+              <View style={styles.expandedContent}>
+                <Text style={styles.expandedTitle}>{currentSegment.title}</Text>
+                <Text style={styles.expandedSubtitle}>
+                  Tap to continue to next segment
+                </Text>
+              </View>
+            )}
+          </View>
         </Animated.View>
       </TouchableOpacity>
     </View>
@@ -184,54 +191,34 @@ const styles = StyleSheet.create({
   video: {
     flex: 1,
   },
-  controlsContainer: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "flex-end",
-  },
   floatingIsland: {
-    margin: 20,
-    marginBottom: 40,
-    borderRadius: 24,
+    position: "absolute",
+    left: 0,
+    right: 0,
     overflow: "hidden",
-    backgroundColor: Platform.select({
-      ios: "transparent",
-      android: "rgba(15, 15, 15, 0.95)",
-    }),
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
+    backgroundColor: "rgba(0, 0, 0, 1)",
   },
   contentWrapper: {
     padding: 20,
-    backgroundColor: Platform.select({
-      ios: "transparent",
-      android: "transparent",
-    }),
+    backgroundColor: "transparent",
   },
   timelineContainer: {
     marginBottom: 16,
   },
   progressBarContainer: {
-    padding: 10,
-    marginHorizontal: -10,
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
-  progressBarBackground: {
+  segment: {
+    flex: 1,
     height: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
     borderRadius: 2,
-    overflow: "hidden",
+    marginHorizontal: 2,
   },
-  progressBar: {
+  segmentFill: {
     height: "100%",
-    backgroundColor: "#a855f7", // Purple from shadcn
+    backgroundColor: "#a855f7",
     borderRadius: 2,
   },
   timeDisplay: {
@@ -245,37 +232,19 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     opacity: 0.9,
   },
-  transcriptionContainer: {
-    maxHeight: 80,
-    marginBottom: 16,
+  expandedContent: {
+    alignItems: "center",
+    marginTop: 20,
+    marginBottom: 40,
   },
-  transcriptionContent: {
-    paddingVertical: 4,
-  },
-  transcriptionText: {
+  expandedTitle: {
     color: "#fff",
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: "400",
-    opacity: 0.9,
+    fontSize: 24,
+    fontWeight: "600",
+    marginBottom: 8,
   },
-  controls: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 20,
-  },
-  controlButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-  },
-  controlButtonText: {
-    fontSize: 20,
+  expandedSubtitle: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 16,
   },
 });
