@@ -8,15 +8,27 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-
+import { useNavigation } from "@react-navigation/native";
 export default function Entry() {
   const [url, setUrl] = useState("");
+  const navigation = useNavigation<any>();
 
-  const handleSubmit = () => {
-    console.log("Analyse URL:", url);
-    // add your analysis logic here
+  const handleSubmit = async (url: string) => {
+    console.log(url);
+    const response = await fetch(
+      `https://2ef2-78-10-33-60.ngrok-free.app/check-video?video_url=${encodeURIComponent(
+        url
+      )}`,
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
+    const data = await response.json();
+    navigation.navigate("Main", { data });
   };
-
   return (
     <LinearGradient
       style={styles.container}
@@ -38,7 +50,7 @@ export default function Entry() {
           pressed && styles.buttonPressed,
           { backgroundColor: "#000" },
         ]}
-        onPress={handleSubmit}
+        onPress={() => handleSubmit(url)}
       >
         <Text style={[styles.buttonText, { color: "#fff" }]}>Analyse</Text>
       </Pressable>

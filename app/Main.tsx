@@ -19,23 +19,21 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 import { BlurView } from "@react-native-community/blur";
+import * as FileSystem from "expo-file-system";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-const segments = [
-  { id: 1, start: 0, end: 5, title: "Introduction" },
-  { id: 2, start: 10, end: 20, title: "Overview" },
-  { id: 3, start: 20, end: 30, title: "Main Content" },
-];
-
 const springConfig = { damping: 30, stiffness: 300, mass: 1 };
 
-export default function VideoPage() {
+export default function VideoPage({ navigation, route }) {
+  const [segments, setSegments] = useState([] as any[]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [data, setData] = useState(route.params.data);
+  const [cachedUri, setCachedUri] = useState<string | null>(null);
   const videoRef = useRef<VideoRef>(null);
 
   // Animation shared values
@@ -44,7 +42,6 @@ export default function VideoPage() {
   const borderRadius = useSharedValue(24);
   const marginHorizontal = useSharedValue(20);
 
-  // Animated style for the floating island
   const floatingCardStyle = useAnimatedStyle(() => ({
     top: top.value,
     bottom: bottom.value,
@@ -60,6 +57,43 @@ export default function VideoPage() {
       handleExpand();
     }
   }, [currentTime, currentSegment]);
+
+  // Cache base64 video to local file system using expo-file-system
+  useEffect(() => {
+    async function cacheVideo() {
+      const videoCacheDir = FileSystem.cacheDirectory + "videos/";
+      try {
+        await FileSystem.makeDirectoryAsync(videoCacheDir, {
+          intermediates: true,
+        });
+      } catch (e) {
+        // Directory might already exist
+      }
+      const fileUri = videoCacheDir + "video.mp4";
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      if (!fileInfo.exists) {
+        await FileSystem.writeAsStringAsync(fileUri, data.video.data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+      }
+      setCachedUri(fileUri);
+      setIsPlaying(true);
+      if (data) {
+        data.movie.slides.map((slide) => {
+          setSegments((prev) => [
+            ...prev,
+            {
+              id: prev.length ? prev[prev.length - 1].id + 1 : 1,
+              title: slide.assesment,
+              start: slide.timestampBeginS,
+              end: slide.timestampBeginS + slide.durationS,
+            },
+          ]);
+        });
+      }
+    }
+    cacheVideo();
+  }, [data]);
 
   const handleExpand = () => {
     setIsExpanded(true);
@@ -77,8 +111,8 @@ export default function VideoPage() {
     marginHorizontal.value = withSpring(20, springConfig);
   };
 
-  const onProgress = (data: OnProgressData) => {
-    setCurrentTime(data.currentTime);
+  const onProgress = (progressData: OnProgressData) => {
+    setCurrentTime(progressData.currentTime);
   };
 
   const formatTime = (timeInSeconds: number) => {
@@ -90,7 +124,6 @@ export default function VideoPage() {
   return (
     <View style={styles.container}>
       <StatusBar hidden />
-
       <TouchableOpacity
         activeOpacity={1}
         style={styles.videoContainer}
@@ -111,21 +144,20 @@ export default function VideoPage() {
         <Video
           ref={videoRef}
           source={{
-            uri: "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+            uri: cachedUri || `data:video/mp4;base64,${data.video.data}`,
           }}
           style={styles.video}
           paused={!isPlaying}
           onProgress={onProgress}
-          onLoad={(data: OnLoadData) => {
+          onLoad={(loadData: OnLoadData) => {
             if (!isPlaying) {
-              setDuration(data.duration);
+              setDuration(loadData.duration);
               setIsPlaying(true);
             }
           }}
           resizeMode="cover"
           poster="https://storage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg"
         />
-
         <Animated.View style={[styles.floatingIsland, floatingCardStyle]}>
           {Platform.OS === "ios" ? (
             <BlurView
@@ -164,7 +196,6 @@ export default function VideoPage() {
                 })}
               </View>
             </View>
-
             {isExpanded && (
               <View style={styles.expandedContent}>
                 <Text style={styles.expandedTitle}>{currentSegment.title}</Text>
@@ -181,16 +212,9 @@ export default function VideoPage() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  videoContainer: {
-    flex: 1,
-  },
-  video: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: "#000" },
+  videoContainer: { flex: 1 },
+  video: { flex: 1 },
   floatingIsland: {
     position: "absolute",
     left: 0,
@@ -198,13 +222,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "rgba(0, 0, 0, 1)",
   },
-  contentWrapper: {
-    padding: 20,
-    backgroundColor: "transparent",
-  },
-  timelineContainer: {
-    marginBottom: 16,
-  },
+  contentWrapper: { padding: 20, backgroundColor: "transparent" },
+  timelineContainer: { marginBottom: 16 },
   progressBarContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -216,35 +235,19 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     marginHorizontal: 2,
   },
-  segmentFill: {
-    height: "100%",
-    backgroundColor: "#a855f7",
-    borderRadius: 2,
-  },
+  segmentFill: { height: "100%", backgroundColor: "#a855f7", borderRadius: 2 },
   timeDisplay: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 8,
   },
-  timeText: {
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: "500",
-    opacity: 0.9,
-  },
-  expandedContent: {
-    alignItems: "center",
-    marginTop: 20,
-    marginBottom: 40,
-  },
+  timeText: { color: "#fff", fontSize: 13, fontWeight: "500", opacity: 0.9 },
+  expandedContent: { alignItems: "center", marginTop: 20, marginBottom: 40 },
   expandedTitle: {
     color: "#fff",
     fontSize: 24,
     fontWeight: "600",
     marginBottom: 8,
   },
-  expandedSubtitle: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 16,
-  },
+  expandedSubtitle: { color: "rgba(255, 255, 255, 0.7)", fontSize: 16 },
 });
