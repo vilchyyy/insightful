@@ -20,7 +20,8 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.RECORD_AUDIO"
       ],
       "package": "com.anonymous.insightful"
     },
@@ -50,6 +51,12 @@
             "useExoplayerHls": false,
             "useExoplayerDash": false
           }
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "micorophonePermission": "Allow $(PRODUCT_NAME) to access your microphone"
         }
       ]
     ],

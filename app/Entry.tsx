@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
+import { Conversation } from "@/app/Conversation";
 export default function Entry() {
   const [url, setUrl] = useState("");
   const navigation = useNavigation<any>();
@@ -16,14 +17,13 @@ export default function Entry() {
   const handleSubmit = async (url: string) => {
     console.log(url);
     const response = await fetch(
-      `https://2ef2-78-10-33-60.ngrok-free.app/check-video?video_url=${encodeURIComponent(
-        url
-      )}`,
+      `${env.process.API}${encodeURIComponent(url)}`,
       {
         method: "GET",
         headers: {
           Accept: "application/json",
         },
+        cache: "no-cache",
       }
     );
     const data = await response.json();
@@ -54,6 +54,7 @@ export default function Entry() {
       >
         <Text style={[styles.buttonText, { color: "#fff" }]}>Analyse</Text>
       </Pressable>
+      <Conversation />
     </LinearGradient>
   );
 }
@@ -70,6 +71,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 30,
     color: "#fff",
+    backgroundColor: "#000",
+    padding: 10,
+    borderRadius: 25, // Made more rounded for pill shape
   },
   input: {
     width: "100%",
@@ -77,7 +81,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderWidth: 1,
     borderColor: "#ddd",
-    borderRadius: 8,
+    borderRadius: 25, // Made more rounded for pill shape
     backgroundColor: "#fff",
     fontSize: 16,
     shadowColor: "#000",
@@ -92,7 +96,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
     paddingVertical: 15,
     paddingHorizontal: 30,
-    borderRadius: 8,
+    borderRadius: 25, // Made more rounded for pill shape
     alignItems: "center",
     shadowColor: "#007AFF",
     shadowOffset: { width: 0, height: 2 },

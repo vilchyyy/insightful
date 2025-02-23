@@ -7,13 +7,15 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  Animated,
+  Linking,
 } from "react-native";
 import Video, {
   OnLoadData,
   OnProgressData,
   VideoRef,
 } from "react-native-video";
-import Animated, {
+import AnimatedReanimated, {
   useAnimatedStyle,
   withSpring,
   useSharedValue,
@@ -22,11 +24,10 @@ import { BlurView } from "@react-native-community/blur";
 import * as FileSystem from "expo-file-system";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-
 const springConfig = { damping: 30, stiffness: 300, mass: 1 };
 
-export default function VideoPage({ navigation, route }) {
-  const [segments, setSegments] = useState([] as any[]);
+export default function VideoPage({ route }) {
+  const [segments, setSegments] = useState<any[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -35,6 +36,16 @@ export default function VideoPage({ navigation, route }) {
   const [data, setData] = useState(route.params.data);
   const [cachedUri, setCachedUri] = useState<string | null>(null);
   const videoRef = useRef<VideoRef>(null);
+
+  // Fade in animation for the card content similar to FactCheck
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   // Animation shared values
   const top = useSharedValue(SCREEN_HEIGHT - SCREEN_HEIGHT / 10.7);
@@ -52,7 +63,7 @@ export default function VideoPage({ navigation, route }) {
   const currentSegment = segments[currentSegmentIndex];
 
   useEffect(() => {
-    if (currentTime >= currentSegment?.end) {
+    if (currentSegment && currentTime >= currentSegment?.end) {
       setIsPlaying(false);
       handleExpand();
     }
@@ -79,14 +90,17 @@ export default function VideoPage({ navigation, route }) {
       setCachedUri(fileUri);
       setIsPlaying(true);
       if (data) {
-        data.movie.slides.map((slide) => {
+        data.movie.slides.forEach((slide) => {
           setSegments((prev) => [
             ...prev,
             {
               id: prev.length ? prev[prev.length - 1].id + 1 : 1,
-              title: slide.assesment,
+              title: slide.assessment,
               start: slide.timestampBeginS,
               end: slide.timestampBeginS + slide.durationS,
+              suggestions: slide.suggestions,
+              explanation: slide.explanation,
+              links: slide.links,
             },
           ]);
         });
@@ -156,9 +170,10 @@ export default function VideoPage({ navigation, route }) {
             }
           }}
           resizeMode="cover"
-          poster="https://storage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg"
         />
-        <Animated.View style={[styles.floatingIsland, floatingCardStyle]}>
+        <AnimatedReanimated.View
+          style={[styles.floatingIsland, floatingCardStyle]}
+        >
           {Platform.OS === "ios" ? (
             <BlurView
               style={StyleSheet.absoluteFill}
@@ -196,58 +211,198 @@ export default function VideoPage({ navigation, route }) {
                 })}
               </View>
             </View>
-            {isExpanded && (
-              <View style={styles.expandedContent}>
+            {isExpanded && currentSegment && (
+              <Animated.View
+                style={[styles.expandedContent, { opacity: fadeAnim }]}
+              >
                 <Text style={styles.expandedTitle}>{currentSegment.title}</Text>
-                <Text style={styles.expandedSubtitle}>
-                  Tap to continue to next segment
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontSize: 26,
+                    textAlign: "center",
+                    fontWeight: "bold",
+                    marginBottom: 20,
+                    marginTop: 10,
+                  }}
+                >
+                  {currentSegment.explanation}
                 </Text>
-              </View>
+
+                {currentSegment.links.map(
+                  (link: { url: string; title: string }) => (
+                    <TouchableOpacity
+                      onPress={() => Linking.openURL(link.url)}
+                      key={link.url}
+                    >
+                      <Text
+                        style={[
+                          {
+                            color: "#fff",
+                            textDecorationLine: "underline",
+                            marginVertical: 4,
+                          },
+                        ]}
+                      >
+                        • {link.title}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                )}
+                <TouchableOpacity>
+                  <Text
+                    style={{
+                      color: "#fff",
+                      backgroundColor: "#ad561c",
+                      padding: 12,
+                      borderRadius: 25,
+                      fontSize: 20,
+                      fontWeight: "bold",
+                      marginBottom: 0,
+                      marginTop: "10",
+                    }}
+                  >
+                    Learn More with AI
+                  </Text>
+                </TouchableOpacity>
+                {currentSegment.suggestions.map((suggestion: string) => (
+                  <TouchableOpacity
+                    onPress={() => Linking.openURL(suggestion)}
+                    key={suggestion}
+                  >
+                    <Text
+                      style={[
+                        {
+                          color: "#fff",
+                          marginVertical: 6,
+                          marginHorizontal: 4,
+                          fontSize: 14,
+                        },
+                      ]}
+                    >
+                      - {suggestion}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </Animated.View>
             )}
           </View>
-        </Animated.View>
+        </AnimatedReanimated.View>
       </TouchableOpacity>
     </View>
   );
-}
-
+} // Replace the existing styles with these enhanced styles
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
-  videoContainer: { flex: 1 },
-  video: { flex: 1 },
+  container: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  videoContainer: {
+    flex: 1,
+  },
+  video: {
+    flex: 1,
+  },
   floatingIsland: {
     position: "absolute",
     left: 0,
     right: 0,
     overflow: "hidden",
-    backgroundColor: "rgba(0, 0, 0, 1)",
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  contentWrapper: { padding: 20, backgroundColor: "transparent" },
-  timelineContainer: { marginBottom: 16 },
+  contentWrapper: {
+    padding: 24,
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  timelineContainer: {
+    marginBottom: 20,
+  },
   progressBarContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
+    marginHorizontal: 4,
   },
   segment: {
     flex: 1,
-    height: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    borderRadius: 2,
-    marginHorizontal: 2,
+    height: 6,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 3,
+    marginHorizontal: 3,
   },
-  segmentFill: { height: "100%", backgroundColor: "#a855f7", borderRadius: 2 },
-  timeDisplay: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
+  segmentFill: {
+    height: "100%",
+    backgroundColor: "#a855f7",
+    borderRadius: 3,
   },
-  timeText: { color: "#fff", fontSize: 13, fontWeight: "500", opacity: 0.9 },
-  expandedContent: { alignItems: "center", marginTop: 20, marginBottom: 40 },
+  expandedContent: {
+    alignItems: "center",
+    marginTop: 24,
+    marginBottom: 40,
+    paddingHorizontal: 16,
+  },
   expandedTitle: {
     color: "#fff",
-    fontSize: 24,
-    fontWeight: "600",
-    marginBottom: 8,
+    backgroundColor: "rgba(168, 85, 247, 0.2)",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 30,
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+    textAlign: "center",
+    overflow: "hidden",
+    maxWidth: "90%",
   },
-  expandedSubtitle: { color: "rgba(255, 255, 255, 0.7)", fontSize: 16 },
+  explanation: {
+    color: "#fff",
+    fontSize: 24,
+    textAlign: "center",
+    fontWeight: "600",
+    marginBottom: 24,
+    lineHeight: 32,
+  },
+  suggestion: {
+    color: "#fff",
+    marginVertical: 8,
+    marginHorizontal: 4,
+    fontSize: 18,
+    lineHeight: 24,
+    opacity: 0.9,
+  },
+  link: {
+    color: "#a855f7",
+    textDecorationLine: "underline",
+    marginVertical: 6,
+    fontSize: 16,
+  },
+  aiButton: {
+    backgroundColor: "#a855f7",
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 30,
+    marginTop: 30,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  aiButtonText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
 });
